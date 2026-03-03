@@ -22,7 +22,7 @@ def get_db_connection():
     """Establish connection to RDS MySQL"""
     try:
         return pymysql.connect(
-            host=DB_HOST,
+            host=DB_HOST1,
             user=DB_USER,
             password=DB_PASSWORD,
             database=DB_NAME,

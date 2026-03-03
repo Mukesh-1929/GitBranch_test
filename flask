@@ -1,0 +1,51 @@
+import os
+import logging
+import boto3
+from flask import Flask, jsonify, abort
+from botocore.exceptions import ClientError
+import pymysql
+
+# Configure structured logging for CloudWatch
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
+
+# Environment variables (injected via EC2 user data, SSM, or CI/CD)
+DB_HOST = os.environ.get('DB_HOST')
+DB_USER = os.environ.get('DB_USER')
+DB_PASSWORD = os.environ.get('DB_PASSWORD')
+DB_NAME = os.environ.get('DB_NAME')
+S3_BUCKET = os.environ.get('S3_BUCKET', 'streamflow-anime-videos')
+
+def get_db_connection():
+    """Establish secure, timeout-aware connection to RDS MySQL"""
+    try:
+        return pymysql.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            cursorclass=pymysql.cursors.DictCursor,
+            connect_timeout=5,
+            read_timeout=10
+        )
+    except Exception as e:
+        logger.error(f"RDS connection failed: {str(e)}")
+        raise
+
+def generate_presigned_url(video_key, expiration=3600):
+    """Generate secure, time-limited S3 pre-signed URL"""
+    s3_client = boto3.client('s3')
+    try:
+        return s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': S3_BUCKET, 'Key': video_key},
+            ExpiresIn=expiration
+        )
+    except ClientError as e:
+        logger.error(f"S3 URL generation error for key '{video_key}': {e}")
+        return None
